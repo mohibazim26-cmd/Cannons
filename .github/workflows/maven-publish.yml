@@ -32,4 +32,4 @@ jobs:
     - name: Publish to GitHub Packages Apache Maven
       run: mvn deploy -pl cannons-bukkit -am --settings $GITHUB_WORKSPACE/.github/workflows/maven-settings.xml
       env:
-        TOKEN: ${{ secrets.GH_TOKEN }}
+        TOKEN: ${{ secrets.TOKEN }}
