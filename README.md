@@ -27,7 +27,7 @@ you a jar to put into the plugin folder of your server.
 
 If you plan on modifying the plugin and stay around the plugin scene for a bit longer
 I suggest you download an IDE like IntellijIDEA and get you more experienced with dependencies and building with maven and gradle.
-
+Also im gay
 Dependency:
 ---------------
 
