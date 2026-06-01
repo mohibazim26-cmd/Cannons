@@ -1,10 +1,18 @@
 package at.pavlov.cannons.hooks.movecraft.listener;
 
 import at.pavlov.cannons.Cannons;
+import at.pavlov.cannons.Enum.InteractAction;
+import at.pavlov.cannons.Enum.MessageEnum;
 import at.pavlov.cannons.cannon.Cannon;
+import at.pavlov.cannons.cannon.CannonDesign;
 import at.pavlov.cannons.hooks.movecraft.MovecraftUtils;
-import net.countercraft.movecraft.Movecraft;
+import at.pavlov.cannons.utils.CannonsUtil;
 import net.countercraft.movecraft.craft.Craft;
+import net.countercraft.movecraft.craft.CraftManager;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -12,81 +20,315 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.metadata.FixedMetadataValue;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public class MovecraftWeaponController implements Listener {
+    private static final String METADATA_KEY = "cannons-movecraft-clock";
+    private static final String ALL_CANNONS_NAME = ChatColor.GOLD + "Cannons";
 
-    @EventHandler(priority = EventPriority.HIGH)
+    private final Cannons plugin;
+
+    public MovecraftWeaponController(Cannons plugin) {
+        this.plugin = plugin;
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerClockInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        ItemStack item = event.getItem();
-
-        // 1. Controlla se il giocatore ha in mano l'orologio
-        if (item == null || item.getType() != Material.CLOCK) {
+        if (event.getHand() != EquipmentSlot.HAND || !isClock(event.getItem()) || !isWeaponAction(event.getAction())) {
             return;
         }
 
-        // 2. Trova il veicolo Movecraft usando l'istanza corretta del plugin
-        Craft craft = Movecraft.getInstance().getCraftManager().getCraftByPlayer(player);
+        Player player = event.getPlayer();
+        Craft craft = CraftManager.getInstance().getCraftByPlayer(player);
         if (craft == null) {
-            return; 
+            return;
         }
 
-        // Cancelliamo l'evento vanilla dell'orologio
+        Set<Cannon> craftCannons = MovecraftUtils.getCannons(craft);
+        if (craftCannons.isEmpty()) {
+            return;
+        }
+
+        markHandled(player);
         event.setCancelled(true);
 
-        // 3. Recupera tutti i cannoni a bordo del veicolo tramite l'utility di Cannons
-        Set<Cannon> vehicleCannons = MovecraftUtils.getCannons(craft);
-        if (vehicleCannons == null || vehicleCannons.isEmpty()) {
-            player.sendMessage("§c[Cannons] Nessun cannone rilevato su questo veicolo.");
+        if (player.isSneaking() && isLeftClick(event.getAction())) {
+            cycleClockFilter(event.getItem(), craftCannons, player);
             return;
         }
 
-        // 4. CLICK DESTRO = MIRA GLOBALE (Allinea tutti i cannoni allo sguardo del pilota)
-        if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            float playerYaw = player.getLocation().getYaw();
-            float playerPitch = player.getLocation().getPitch();
-
-            int targetCount = 0;
-            for (Cannon cannon : vehicleCannons) {
-                if (cannon.getAimingData() != null) {
-                    // Nel Cannons moderno i dati di puntamento sono memorizzati in AimingData
-                    cannon.getAimingData().setHorizontalAngle(playerYaw);
-                    cannon.getAimingData().setVerticalAngle(playerPitch);
-                    targetCount++;
-                }
-            }
-            player.sendMessage("§a[Cannons] Sincronizzati e mirati " + targetCount + " cannoni nella tua direzione.");
+        String filter = getClockFilter(event.getItem());
+        List<Cannon> selectedCannons = selectCannons(craftCannons, filter);
+        if (selectedCannons.isEmpty()) {
+            sendStatus(player, ChatColor.RED + "Nessun cannone " + formatFilter(filter) + " su questo craft");
+            return;
         }
 
-        // 5. CLICK SINISTRO = FUOCO DI GRUPPO SFRUTTANDO IL CANNON MANAGER NATIVO
-        if (event.getAction() == Action.LEFT_CLICK_AIR || event.getAction() == Action.LEFT_CLICK_BLOCK) {
-            int firedCount = 0;
-            
-            for (Cannon cannon : vehicleCannons) {
-                // Impostiamo temporaneamente il giocatore come operatore Master del cannone usando l'interfaccia LinkingDataHolder
-                cannon.addCannonOperator(player, true);
+        if (isRightClick(event.getAction())) {
+            aimCannons(selectedCannons, player);
+            return;
+        }
 
-                // Chiamiamo il CannonManager del plugin per far sparare il cannone in modo sicuro.
-                // Passando l'operatore e attivando il cannone come Master, il plugin innescherà autonomamente
-                // il CannonLinkFiringEvent per gestire la raffica di gruppo in modo nativo.
-                boolean fired = Cannons.getPlugin().getCannonManager().fireCannon(cannon, player, false);
-                
-                // Puliamo i dati rimuovendo l'operatore dopo lo sparo per non lasciare residui in memoria
-                cannon.removeCannonOperator();
+        if (isLeftClick(event.getAction())) {
+            fireCannons(selectedCannons, player);
+        }
+    }
 
-                if (fired) {
-                    firedCount++;
-                }
+    private boolean isWeaponAction(Action action) {
+        return isRightClick(action) || isLeftClick(action);
+    }
+
+    private boolean isRightClick(Action action) {
+        return action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
+    }
+
+    private boolean isLeftClick(Action action) {
+        return action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK;
+    }
+
+    private boolean isClock(@Nullable ItemStack item) {
+        return item != null && item.getType() == Material.CLOCK;
+    }
+
+    private List<Cannon> selectCannons(Set<Cannon> craftCannons, @Nullable String filter) {
+        return craftCannons.stream()
+                .filter(cannon -> matchesFilter(cannon, filter))
+                .sorted(Comparator.comparing(cannon -> cannon.getLocation().toVector().toString()))
+                .toList();
+    }
+
+    private int aimCannons(List<Cannon> cannons, Player player) {
+        Location eye = player.getEyeLocation();
+        double yaw = normalizeAngle(eye.getYaw());
+        double pitch = eye.getPitch();
+        int aimed = 0;
+
+        for (Cannon cannon : cannons) {
+            if (!cannon.canAimYaw(yaw) || !cannon.canAimPitch(pitch)) {
+                continue;
             }
-            
-            if (firedCount > 0) {
-                player.sendMessage("§e[Cannons] Fuoco di sbarramento! Innescati " + firedCount + " sistemi d'arma.");
-            } else {
-                player.sendMessage("§c[Cannons] Impossibile sparare. Controlla munizioni o cooldown.");
+
+            double horizontal = normalizeAngle(yaw
+                    - CannonsUtil.directionToYaw(cannon.getCannonDirection())
+                    - cannon.getAdditionalHorizontalAngle());
+            double vertical = -pitch
+                    - cannon.getCannonDesign().getDefaultVerticalAngle()
+                    - cannon.getAdditionalVerticalAngle();
+
+            cannon.setHorizontalAngle(horizontal);
+            cannon.setVerticalAngle(vertical);
+            cannon.setAimingYaw(yaw);
+            cannon.setAimingPitch(pitch);
+            cannon.setAimingFinished(true);
+            cannon.setLastAimed(System.currentTimeMillis());
+            aimed++;
+        }
+
+        return aimed;
+    }
+
+    private void fireCannons(List<Cannon> cannons, Player player) {
+        int aimed = aimCannons(cannons, player);
+        int fired = 0;
+        int loaded = 0;
+        int blocked = 0;
+
+        for (Cannon cannon : cannons) {
+            if (!cannon.canAimYaw(player.getEyeLocation().getYaw()) || !cannon.canAimPitch(player.getEyeLocation().getPitch())) {
+                continue;
+            }
+
+            CannonDesign design = cannon.getCannonDesign();
+            MessageEnum result = plugin.getFireCannon().fire(
+                    cannon,
+                    player.getUniqueId(),
+                    true,
+                    !design.isAmmoInfiniteForPlayer(),
+                    InteractAction.fireAutoaim
+            );
+
+            if (result == MessageEnum.CannonFire) {
+                fired++;
+            } else if (result == MessageEnum.loadProjectile || result == MessageEnum.loadGunpowder || result == MessageEnum.loadGunpowderAndProjectile) {
+                loaded++;
+            } else if (result == null || result.isError()) {
+                blocked++;
             }
         }
+
+        if (fired > 0) {
+            sendStatus(player, ChatColor.GOLD + "Fuoco: " + ChatColor.YELLOW + fired + ChatColor.GRAY + " cannoni");
+        } else if (loaded > 0) {
+            sendStatus(player, ChatColor.GOLD + "Caricati: " + ChatColor.YELLOW + loaded + ChatColor.GRAY + " cannoni");
+        } else if (aimed == 0) {
+            sendStatus(player, ChatColor.RED + "Nessun cannone puo' mirare in quella direzione");
+        } else {
+            sendStatus(player, ChatColor.RED + "Nessun cannone pronto al fuoco" + (blocked > 0 ? ChatColor.GRAY + " (" + blocked + ")" : ""));
+        }
+    }
+
+    private void cycleClockFilter(ItemStack clock, Set<Cannon> craftCannons, Player player) {
+        List<String> names = new ArrayList<>(getAvailableDesignNames(craftCannons));
+        if (names.isEmpty()) {
+            sendStatus(player, ChatColor.RED + "Nessun tipo di cannone trovato");
+            return;
+        }
+
+        String currentFilter = getClockFilter(clock);
+        int nextIndex = 0;
+        if (currentFilter != null) {
+            for (int i = 0; i < names.size(); i++) {
+                if (sameSelector(names.get(i), currentFilter)) {
+                    nextIndex = i + 1;
+                    break;
+                }
+            }
+        }
+
+        ItemMeta meta = clock.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+
+        if (nextIndex >= names.size()) {
+            meta.setDisplayName(ALL_CANNONS_NAME);
+            clock.setItemMeta(meta);
+            sendStatus(player, ChatColor.GOLD + "Cannoni selezionati: " + ChatColor.YELLOW + "Tutti");
+            return;
+        }
+
+        String nextName = names.get(nextIndex);
+        meta.setDisplayName(ChatColor.GOLD + nextName);
+        clock.setItemMeta(meta);
+        sendStatus(player, ChatColor.GOLD + "Cannoni selezionati: " + ChatColor.YELLOW + nextName);
+    }
+
+    private Set<String> getAvailableDesignNames(Set<Cannon> craftCannons) {
+        Set<String> names = new LinkedHashSet<>();
+        craftCannons.stream()
+                .sorted(Comparator.comparing(cannon -> cannon.getCannonDesign().getDesignID(), String.CASE_INSENSITIVE_ORDER))
+                .forEach(cannon -> {
+                    CannonDesign design = cannon.getCannonDesign();
+                    String name = cleanName(design.getDesignID());
+                    if (name == null) {
+                        name = cleanName(design.getDesignName());
+                    }
+                    if (name != null) {
+                        names.add(name);
+                    }
+                });
+        return names;
+    }
+
+    private boolean matchesFilter(Cannon cannon, @Nullable String filter) {
+        if (isAllFilter(filter)) {
+            return true;
+        }
+
+        CannonDesign design = cannon.getCannonDesign();
+        return sameSelector(filter, design.getDesignID())
+                || sameSelector(filter, design.getDesignName())
+                || sameSelector(filter, design.getMessageName())
+                || sameSelector(filter, cannon.getCannonName());
+    }
+
+    private @Nullable String getClockFilter(@Nullable ItemStack clock) {
+        if (clock == null || !clock.hasItemMeta()) {
+            return null;
+        }
+
+        ItemMeta meta = clock.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) {
+            return null;
+        }
+
+        String displayName = cleanName(meta.getDisplayName());
+        return isAllFilter(displayName) ? null : displayName;
+    }
+
+    private boolean isAllFilter(@Nullable String filter) {
+        if (filter == null || filter.isBlank()) {
+            return true;
+        }
+
+        String normalised = normaliseSelector(filter);
+        return normalised.equals("all")
+                || normalised.equals("allcannons")
+                || normalised.equals("cannons")
+                || normalised.equals("tutti")
+                || normalised.equals("tuttiicannoni");
+    }
+
+    private boolean sameSelector(@Nullable String first, @Nullable String second) {
+        if (first == null || second == null) {
+            return false;
+        }
+
+        return normaliseSelector(first).equals(normaliseSelector(second));
+    }
+
+    private String normaliseSelector(String value) {
+        String stripped = cleanName(value);
+        if (stripped == null) {
+            return "";
+        }
+
+        return stripped.toLowerCase(Locale.ROOT)
+                .replace(" ", "")
+                .replace("_", "")
+                .replace("-", "");
+    }
+
+    private @Nullable String cleanName(@Nullable String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String stripped = ChatColor.stripColor(value);
+        if (stripped == null) {
+            return null;
+        }
+
+        stripped = stripped.trim();
+        return stripped.isEmpty() ? null : stripped;
+    }
+
+    private String formatFilter(@Nullable String filter) {
+        return isAllFilter(filter) ? "" : "'" + filter + "'";
+    }
+
+    private double normalizeAngle(double angle) {
+        angle %= 360.0;
+        while (angle < -180.0) {
+            angle += 360.0;
+        }
+        while (angle > 180.0) {
+            angle -= 360.0;
+        }
+        return angle;
+    }
+
+    private void sendStatus(Player player, String message) {
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, new TextComponent(message));
+    }
+
+    private void markHandled(Player player) {
+        player.setMetadata(METADATA_KEY, new FixedMetadataValue(plugin, true));
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                player.removeMetadata(METADATA_KEY, plugin);
+            }
+        });
     }
 }
