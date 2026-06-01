@@ -17,5 +17,6 @@ public class SinkListener implements Listener {
     public void onCraftSink(CraftSinkEvent event) {
         Set<Cannon> cannons = MovecraftUtils.getCannons(event.getCraft());
         cannons.forEach(cannon -> CannonManager.getInstance().removeCannon(cannon.getUID(), false, true, BreakCause.Explosion));
+        MovecraftUtils.clearRegisteredCannons(event.getCraft());
     }
 }
