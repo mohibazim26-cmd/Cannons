@@ -220,6 +220,11 @@ public class FireCannon {
             return null;
 
         Projectile projectile = cannon.getLoadedProjectile();
+        if (projectile == null) {
+            SoundUtils.playErrorSound(cannon.getMuzzle());
+            return MessageEnum.ErrorNoProjectile;
+        }
+
         //reset after firing
         cannon.setLastFired(System.currentTimeMillis());
         //this cannon is now firing
