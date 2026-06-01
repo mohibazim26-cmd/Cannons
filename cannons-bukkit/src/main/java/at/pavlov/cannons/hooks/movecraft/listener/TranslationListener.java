@@ -9,8 +9,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import javax.annotation.Nullable;
 import java.util.Set;
 
 public class TranslationListener implements Listener {
@@ -21,9 +21,14 @@ public class TranslationListener implements Listener {
         if (v == null)
             return;
 
-        Set<Cannon> cannons = MovecraftUtils.getCannons(e.getCraft());
+        Set<Cannon> cannons = MovecraftUtils.getRegisteredCannons(e.getCraft());
+        if (cannons.isEmpty()) {
+            cannons = MovecraftUtils.getCannons(e.getWorld(), e.getOldHitBox());
+        }
         if (cannons.isEmpty())
             return;
+
+        MovecraftUtils.registerCannons(e.getCraft(), cannons);
         for (Cannon c : cannons) {
             c.move(v);
         }
