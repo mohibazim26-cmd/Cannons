@@ -224,6 +224,10 @@ public class PlayerListener implements Listener {
         Action action = event.getAction();
 
         final Player player = event.getPlayer();
+        if (event.isCancelled() && player.hasMetadata("cannons-movecraft-clock")) {
+            return;
+        }
+
         Block clickedBlock = getBlock(event.getClickedBlock(), player);
         if (clickedBlock == null) {
             return;
