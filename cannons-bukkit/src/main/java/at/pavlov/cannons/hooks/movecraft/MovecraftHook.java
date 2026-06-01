@@ -4,6 +4,7 @@ import at.pavlov.cannons.Cannons;
 import at.pavlov.cannons.hooks.BukkitHook;
 import at.pavlov.cannons.hooks.movecraft.listener.CraftDetectListener;
 import at.pavlov.cannons.hooks.movecraft.listener.MovecraftWeaponController;
+import at.pavlov.cannons.hooks.movecraft.listener.MovecraftWeaponsScoreboard;
 import at.pavlov.cannons.hooks.movecraft.listener.ReleaseListener;
 import at.pavlov.cannons.hooks.movecraft.listener.RotationListener;
 import at.pavlov.cannons.hooks.movecraft.listener.SinkListener;
@@ -45,6 +46,7 @@ public class MovecraftHook extends BukkitHook<Movecraft> {
         pluginManager.registerEvents(new SinkListener(), plugin);
         pluginManager.registerEvents(new ReleaseListener(), plugin);
         pluginManager.registerEvents(new MovecraftWeaponController(plugin), plugin);
+        pluginManager.registerEvents(new MovecraftWeaponsScoreboard(plugin), plugin);
         plugin.logInfo(ChatColor.GREEN + enabledMessage());
     }
 
