@@ -1,5 +1,6 @@
 package at.pavlov.cannons.hooks.movecraft.listener;
 
+import at.pavlov.cannons.Cannons;
 import at.pavlov.cannons.cannon.Cannon;
 import at.pavlov.cannons.hooks.movecraft.MovecraftUtils;
 import net.countercraft.movecraft.Movecraft;
@@ -27,61 +28,55 @@ public class MovecraftWeaponController implements Listener {
             return;
         }
 
-        // 2. Verifica se il giocatore sta effettivamente pilotando un veicolo Movecraft
-        // Utilizziamo il registro ufficiale di Movecraft per trovare il Craft pilotato dal player
-        Craft craft = Movecraft.getRegistry().getPilotedCraftByPlayer(player);
+        // 2. Trova il veicolo Movecraft pilotato dal giocatore passando dal CraftManager globale
+        Craft craft = Movecraft.getInstance().getCraftManager().getCraftByPlayer(player);
         if (craft == null) {
-            return; // Il giocatore non sta pilotando, lascia gestire a Cannons la logica normale
+            return; // Il giocatore non sta pilotando un veicolo, lascia gestire al comportamento standard
         }
 
-        // Intercettiamo l'evento per evitare che l'orologio faccia altre azioni vanilla
+        // Cancelliamo l'evento per impedire interazioni vanilla dell'orologio
         event.setCancelled(true);
 
-        // 3. Recupera tutti i cannoni presenti all'interno della struttura del veicolo
+        // 3. Recupera tutti i cannoni presenti all'interno della struttura della nave
         Set<Cannon> vehicleCannons = MovecraftUtils.getCannons(craft);
-        if (vehicleCannons.isEmpty()) {
+        if (vehicleCannons == null || vehicleCannons.isEmpty()) {
             player.sendMessage("§c[Cannons] Nessun cannone rilevato su questo veicolo.");
             return;
         }
 
-        // 4. GESTIONE INPUT: CLICK DESTRO = MIRA GENERALE (Allinea i cannoni allo sguardo del pilota)
+        // 4. CLICK DESTRO = MIRA GLOBALE (Allinea i cannoni allo sguardo del pilota)
         if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            // Otteniamo la direzione dello sguardo del pilota (Yaw e Pitch attuali)
             float playerYaw = player.getLocation().getYaw();
             float playerPitch = player.getLocation().getPitch();
 
             int targetCount = 0;
             for (Cannon cannon : vehicleCannons) {
-                // Imposta l'angolo del cannone basandoti sullo sguardo del pilota.
-                // Nota: I metodi esatti nel tuo database Cannons potrebbero essere 
-                // cannon.getAngleData().setYaw() / setPitch() o simili basati su Cannons.txt
-                cannon.getAngleData().setHorizontalAngle(playerYaw);
-                cannon.getAngleData().setVerticalAngle(playerPitch);
-                
-                // Forza il ricalcolo e l'aggiornamento visivo dei blocchi del cannone nel mondo
-                cannon.updateCannonSign(); 
-                targetCount++;
+                if (cannon.getAngleData() != null) {
+                    // Imposta gli angoli orizzontali e verticali in base al mirino del pilota
+                    cannon.getAngleData().setHorizontalAngle(playerYaw);
+                    cannon.getAngleData().setVerticalAngle(playerPitch);
+                    targetCount++;
+                }
             }
             player.sendMessage("§a[Cannons] Sincronizzati e mirati " + targetCount + " cannoni nella tua direzione.");
         }
 
-        // 5. GESTIONE INPUT: CLICK SINISTRO = INNESCO SPARO + AUTORELOAD DA CHEST
+        // 5. CLICK SINISTRO = FUOCO SIMULTANEO + AUTO-RICARICA DA CHEST
         if (event.getAction() == Action.LEFT_CLICK_AIR || event.getAction() == Action.LEFT_CLICK_BLOCK) {
             int firedCount = 0;
             for (Cannon cannon : vehicleCannons) {
-                // Eseguiamo il metodo nativo di sparo di Cannons.
-                // Se nel file di configurazione (.yml) del cannone hai impostato l'autoreload da chest,
-                // il metodo c.fire() controllerà automaticamente la chest adiacente,
-                // preleverà la polvere da sparo e il proiettile, ricaricherà e sparerà in un colpo solo.
-                boolean fired = cannon.fire(player, false); 
+                // Chiamiamo il CannonManager del plugin Cannons. 
+                // Questo metodo esegue i controlli nativi: se il cannone ha l'autoreload attivo,
+                // preleva munizioni e polvere dalla chest adiacente e spara istantaneamente.
+                boolean fired = Cannons.getPlugin().getCannonManager().fireCannon(cannon, player, false);
                 if (fired) {
                     firedCount++;
                 }
             }
             if (firedCount > 0) {
-                player.sendMessage("§e[Cannons] Fuoco di sbarco! Sparati " + firedCount + " cannoni.");
+                player.sendMessage("§e[Cannons] Fuoco di sbarramento! Sparati " + firedCount + " cannoni.");
             } else {
-                player.sendMessage("§c[Cannons] Impossibile sparare. Controlla munizioni nelle chest o il cooldown dei cannoni.");
+                player.sendMessage("§c[Cannons] Impossibile sparare. Controlla munizioni o il cooldown dei cannoni.");
             }
         }
     }
