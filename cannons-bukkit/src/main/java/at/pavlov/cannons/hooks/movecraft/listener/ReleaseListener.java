@@ -11,5 +11,6 @@ public class ReleaseListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onRelease(CraftReleaseEvent event) {
         MovecraftUtils.getCannons(event.getCraft()).forEach(it -> it.setOnShip(false));
+        MovecraftUtils.clearRegisteredCannons(event.getCraft());
     }
 }
