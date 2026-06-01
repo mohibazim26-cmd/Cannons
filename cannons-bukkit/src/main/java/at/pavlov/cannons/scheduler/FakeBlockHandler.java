@@ -5,7 +5,6 @@ import at.pavlov.internal.enums.FakeBlockType;
 import at.pavlov.cannons.config.Config;
 import at.pavlov.internal.container.FakeBlockEntry;
 import at.pavlov.cannons.dao.AsyncTaskManager;
-import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -29,7 +28,6 @@ public class FakeBlockHandler {
     private long lastImpactPredictor;
     private final AsyncTaskManager taskManager;
 
-    @Getter
     private static FakeBlockHandler instance = null;
 
 
@@ -45,6 +43,10 @@ public class FakeBlockHandler {
         }
 
         instance = new FakeBlockHandler(plugin);
+    }
+
+    public static FakeBlockHandler getInstance() {
+        return instance;
     }
 
     /**
@@ -116,6 +118,26 @@ public class FakeBlockHandler {
             //remove this entry
             iter.remove();
             //plugin.logDebug("remove older fake entry: " + loc.getBlockX() + ", " + loc.getBlockY() + ", " + loc.getBlockZ() + ", " + next.getType().toString() + " stime " + next.getStartTime());
+        }
+    }
+
+    public void removeFakeBlocks(Player player, FakeBlockType type) {
+        if (player == null || type == null) {
+            return;
+        }
+
+        Iterator<FakeBlockEntry> iter = list.iterator();
+        while (iter.hasNext()) {
+            FakeBlockEntry next = iter.next();
+            if (!player.getUniqueId().equals(next.getPlayer()) || next.getType() != type) {
+                continue;
+            }
+
+            Location loc = location(next);
+            if (loc != null) {
+                taskManager.scheduler.runTask(loc, () -> player.sendBlockChange(loc, loc.getBlock().getBlockData()));
+            }
+            iter.remove();
         }
     }
 
