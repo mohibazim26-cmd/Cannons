@@ -17,10 +17,14 @@ public class RotationListener implements Listener {
     public void rotateListener(CraftRotateEvent e) {
         Craft craft = e.getCraft();
 
-        Set<Cannon> cannons = MovecraftUtils.getCannons(craft);
+        Set<Cannon> cannons = MovecraftUtils.getRegisteredCannons(craft);
+        if (cannons.isEmpty()) {
+            cannons = MovecraftUtils.getCannons(craft.getWorld(), e.getOldHitBox());
+        }
         if (cannons.isEmpty())
             return;
 
+        MovecraftUtils.registerCannons(craft, cannons);
         Vector v = e.getOriginPoint().toBukkit(craft.getWorld()).toVector();
         for (Cannon c : cannons) {
             switch (e.getRotation()) {
