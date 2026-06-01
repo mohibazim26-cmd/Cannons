@@ -7,6 +7,7 @@ import at.pavlov.cannons.cannon.Cannon;
 import at.pavlov.cannons.cannon.CannonDesign;
 import at.pavlov.cannons.hooks.movecraft.MovecraftUtils;
 import at.pavlov.cannons.utils.CannonsUtil;
+import at.pavlov.internal.enums.FakeBlockType;
 import net.countercraft.movecraft.craft.Craft;
 import net.countercraft.movecraft.craft.CraftManager;
 import net.md_5.bungee.api.ChatMessageType;
@@ -28,19 +29,25 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 public class MovecraftWeaponController implements Listener {
     private static final String METADATA_KEY = "cannons-movecraft-clock";
     private static final String ALL_CANNONS_NAME = ChatColor.GOLD + "Cannons";
+    private static final long AIM_HOLD_MILLIS = 2000L;
 
     private final Cannons plugin;
+    private final Map<UUID, Long> activeAiming = new HashMap<>();
 
     public MovecraftWeaponController(Cannons plugin) {
         this.plugin = plugin;
+        plugin.getServer().getScheduler().runTaskTimer(plugin, this::tickActiveAiming, 2L, 5L);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -76,7 +83,9 @@ public class MovecraftWeaponController implements Listener {
         }
 
         if (isRightClick(event.getAction())) {
+            activeAiming.put(player.getUniqueId(), System.currentTimeMillis() + AIM_HOLD_MILLIS);
             aimCannons(selectedCannons, player);
+            showAimingVectors(selectedCannons, player);
             return;
         }
 
@@ -175,6 +184,46 @@ public class MovecraftWeaponController implements Listener {
             sendStatus(player, ChatColor.RED + "Nessun cannone puo' mirare in quella direzione");
         } else {
             sendStatus(player, ChatColor.RED + "Nessun cannone pronto al fuoco" + (blocked > 0 ? ChatColor.GRAY + " (" + blocked + ")" : ""));
+        }
+    }
+
+    private void showAimingVectors(List<Cannon> cannons, Player player) {
+        plugin.getFakeBlockHandler().removeFakeBlocks(player, FakeBlockType.AIMING);
+        for (Cannon cannon : cannons) {
+            plugin.getAiming().showAimingVector(cannon, player);
+        }
+    }
+
+    private void tickActiveAiming() {
+        long now = System.currentTimeMillis();
+        var iterator = activeAiming.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, Long> entry = iterator.next();
+            Player player = plugin.getServer().getPlayer(entry.getKey());
+            if (player == null || !player.isOnline() || entry.getValue() < now || !isClock(player.getInventory().getItemInMainHand())) {
+                if (player != null) {
+                    plugin.getFakeBlockHandler().removeFakeBlocks(player, FakeBlockType.AIMING);
+                }
+                iterator.remove();
+                continue;
+            }
+
+            Craft craft = CraftManager.getInstance().getCraftByPlayer(player);
+            if (craft == null) {
+                plugin.getFakeBlockHandler().removeFakeBlocks(player, FakeBlockType.AIMING);
+                iterator.remove();
+                continue;
+            }
+
+            List<Cannon> cannons = selectCannons(MovecraftUtils.getCannons(craft), getClockFilter(player.getInventory().getItemInMainHand()));
+            if (cannons.isEmpty()) {
+                plugin.getFakeBlockHandler().removeFakeBlocks(player, FakeBlockType.AIMING);
+                iterator.remove();
+                continue;
+            }
+
+            aimCannons(cannons, player);
+            showAimingVectors(cannons, player);
         }
     }
 
