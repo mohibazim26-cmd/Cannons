@@ -11,6 +11,8 @@ folia-supported: true
 commands:
   cannons:
     description: Info how to use/build/adjust a cannon and to reload the plugin.
+  firepower:
+    description: Shows cannon and torpedo firepower on the piloted Movecraft craft.
 
 permissions:
   cannons.*:
@@ -177,3 +179,4 @@ permissions:
   cannons.admin.blockdata:
       description: Shows information about the blockdata
       default: op
+
