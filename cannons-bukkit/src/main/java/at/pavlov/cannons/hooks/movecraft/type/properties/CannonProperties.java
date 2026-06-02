@@ -28,6 +28,10 @@ public class CannonProperties {
 
     public static final PropertyWrapperInt MAX_MASS = new PropertyWrapperInt(CraftKeys.MAX_MASS, (type) -> null);
     public static final PropertyWrapperInt MIN_MASS = new PropertyWrapperInt(CraftKeys.MIN_MASS, (type) -> null);
+    public static final PropertyWrapperInt MAX_CANNON_FIREPOWER = new PropertyWrapperInt(CraftKeys.MAX_CANNON_FIREPOWER, (type) -> null);
+    public static final PropertyWrapperInt MAX_TORPEDO_FIREPOWER = new PropertyWrapperInt(CraftKeys.MAX_TORPEDO_FIREPOWER, (type) -> null);
+    public static final PropertyWrapperBoolean TORPEDO_OVERFLOW_USES_CANNON_FIREPOWER = new PropertyWrapperBoolean(CraftKeys.TORPEDO_OVERFLOW_USES_CANNON_FIREPOWER, (type) -> false);
+    public static final PropertyWrapperBoolean SCALE_FIREPOWER_WITH_SIZE = new PropertyWrapperBoolean(CraftKeys.SCALE_FIREPOWER_WITH_SIZE, (type) -> false);
     public static final PropertyWrapper<Set> EXCLUDE_FROM_MASS = new PropertyWrapper<>(
         CraftKeys.EXCLUDE_FROM_MASS,
         Set.class,
@@ -73,6 +77,10 @@ public class CannonProperties {
 
         MAX_MASS.register();
         MIN_MASS.register();
+        MAX_CANNON_FIREPOWER.register();
+        MAX_TORPEDO_FIREPOWER.register();
+        TORPEDO_OVERFLOW_USES_CANNON_FIREPOWER.register();
+        SCALE_FIREPOWER_WITH_SIZE.register();
         EXCLUDE_FROM_MASS.register((data, type, fileKey, namespacedKey) -> {
             List<String> list = data.getStringList(fileKey);
             if (list.isEmpty())
