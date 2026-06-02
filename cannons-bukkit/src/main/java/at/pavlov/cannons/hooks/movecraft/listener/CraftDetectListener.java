@@ -3,6 +3,8 @@ package at.pavlov.cannons.hooks.movecraft.listener;
 import at.pavlov.cannons.Cannons;
 import at.pavlov.cannons.cannon.Cannon;
 import at.pavlov.cannons.cannon.CannonDesign;
+import at.pavlov.cannons.hooks.movecraft.FirepowerReport;
+import at.pavlov.cannons.hooks.movecraft.FirepowerUtil;
 import at.pavlov.cannons.hooks.movecraft.MovecraftUtils;
 import at.pavlov.cannons.hooks.movecraft.type.CannonCheck;
 import at.pavlov.cannons.hooks.movecraft.type.properties.CannonProperties;
@@ -35,12 +37,45 @@ public class CraftDetectListener implements Listener {
 
         if (checkMaxMin(e, type, cannons, craft)) return;
 
+        if (checkFirepower(e, cannons, craft)) return;
+
         if (checkMass(e, cannons, type)) return;
 
         boolean useShip = CannonProperties.USE_SHIP_ANGLES.get(type) == Boolean.TRUE;
         if (useShip) {
             cannons.forEach(it -> it.setOnShip(true));
         }
+    }
+
+    private boolean checkFirepower(CraftDetectEvent e, Set<Cannon> cannons, Craft craft) {
+        FirepowerReport report = FirepowerUtil.calculate(craft, cannons);
+
+        if (report.exceedsTorpedoLimitWithoutOverflow()) {
+            e.setCancelled(true);
+            e.setFailMessage(
+                String.format(
+                    "Detection Failed! Too much torpedo firepower on board! %.2f > %d",
+                    report.torpedoFirepower(),
+                    report.maxTorpedoFirepower()
+                )
+            );
+            return true;
+        }
+
+        if (report.exceedsCannonLimit()) {
+            e.setCancelled(true);
+            e.setFailMessage(
+                String.format(
+                    "Detection Failed! Too much cannon firepower on board! %.2f > %d%s",
+                    report.effectiveCannonFirepower(),
+                    report.maxCannonFirepower(),
+                    report.torpedoOverflow() > 0 ? String.format(" (%.2f torpedo overflow)", report.torpedoOverflow()) : ""
+                )
+            );
+            return true;
+        }
+
+        return false;
     }
 
     private boolean checkMass(CraftDetectEvent e, Set<Cannon> cannons, CraftType type) {
