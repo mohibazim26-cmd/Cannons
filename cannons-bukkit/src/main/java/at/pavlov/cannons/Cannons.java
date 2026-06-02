@@ -8,6 +8,7 @@ import at.pavlov.cannons.cannon.CannonManager;
 import at.pavlov.cannons.cannon.DesignStorage;
 import at.pavlov.cannons.commands.CannonsCommandManager;
 import at.pavlov.cannons.commands.Commands;
+import at.pavlov.cannons.commands.FirepowerCommand;
 import at.pavlov.cannons.config.Config;
 import at.pavlov.cannons.config.UserMessages;
 import at.pavlov.cannons.container.ItemHolder;
@@ -303,6 +304,7 @@ public final class Cannons extends JavaPlugin {
     private void initCommands() {
         var cannonsCommandManager = new CannonsCommandManager(this);
         cannonsCommandManager.registerCommand(new Commands(this));
+        cannonsCommandManager.registerCommand(new FirepowerCommand());
     }
 
     // set up ebean database
